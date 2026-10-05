@@ -135,9 +135,10 @@ impl TryFrom<SkipTo> for PlayingTrack {
     fn try_from(value: SkipTo) -> Result<Self, Self::Error> {
         // order of checks is important, as the index can be 0, but still has an uid or uri provided,
         // so we only use the index as last resort
-        if let Some(uri) = value.track_uri {
+        // clients may send an empty uri alongside a valid uid, so skip empty values
+        if let Some(uri) = value.track_uri.filter(|uri| !uri.is_empty()) {
             Ok(PlayingTrack::Uri(uri))
-        } else if let Some(uid) = value.track_uid {
+        } else if let Some(uid) = value.track_uid.filter(|uid| !uid.is_empty()) {
             Ok(PlayingTrack::Uid(uid))
         } else if let Some(index) = value.track_index {
             Ok(PlayingTrack::Index(index))
