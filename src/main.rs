@@ -2087,7 +2087,12 @@ async fn main() {
             },
             _ = async {}, if connecting && last_credentials.is_some() => {
                 if session.is_invalid() {
+                    // Keep the playback session id across an automatic reconnect. Spirc only
+                    // takes over interrupted playback when the cluster's player_state belongs to
+                    // our own session; a fresh id makes it treat its own playback as foreign.
+                    let previous_session_id = session.session_id();
                     session = Session::new(setup.session_config.clone(), setup.cache.clone());
+                    session.set_session_id(&previous_session_id);
                     player.set_session(session.clone());
                 }
 
