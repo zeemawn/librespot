@@ -946,7 +946,41 @@ impl SpircTask {
         use protobuf::Message;
 
         match TransferState::parse_from_bytes(&cluster.transfer_data) {
-            Ok(transfer_state) => self.handle_transfer(transfer_state)?,
+            Ok(mut transfer_state) => {
+                // transfer_data is a snapshot taken when playback was handed to this device,
+                // while player_state is what we last reported. When taking back our own
+                // interrupted session, resume from the live state instead of jumping back to
+                // the track (and playlist) that was playing at hand-over time.
+                let live = &cluster.player_state;
+                if let Some(track) = live.track.as_ref().filter(|t| !t.uri.is_empty()) {
+                    let uid = (!track.uid.is_empty()).then(|| track.uid.clone());
+                    if transfer_state.current_session.context.uri.as_deref()
+                        != Some(live.context_uri.as_str())
+                    {
+                        transfer_state
+                            .current_session
+                            .mut_or_insert_default()
+                            .context
+                            .mut_or_insert_default()
+                            .uri = Some(live.context_uri.clone());
+                        transfer_state.queue.mut_or_insert_default().tracks.clear();
+                    }
+                    transfer_state.queue.mut_or_insert_default().is_playing_queue = Some(false);
+                    transfer_state.current_session.mut_or_insert_default().current_uid = uid.clone();
+                    let playback = transfer_state.playback.mut_or_insert_default();
+                    let current = playback.current_track.mut_or_insert_default();
+                    current.uri = Some(track.uri.clone());
+                    current.uid = uid;
+                    playback.timestamp = Some(live.timestamp);
+                    playback.position_as_of_timestamp = i32::try_from(live.position_as_of_timestamp).ok();
+                    playback.is_paused = Some(live.is_paused);
+                    info!(
+                        "resuming from live player state: <{}> at {}ms",
+                        track.uri, live.position_as_of_timestamp
+                    );
+                }
+                self.handle_transfer(transfer_state)?
+            }
             Err(why) => error!("failed to take over control: {why}"),
         }
 
