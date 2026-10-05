@@ -596,7 +596,17 @@ impl SpircTask {
 
         if !self.shutdown && self.connect_state.is_active() {
             warn!("unexpected shutdown");
-            if let Err(why) = self.handle_disconnect().await {
+            if self.session.is_invalid() {
+                // The connection was lost rather than closed on purpose. Don't report a stopped
+                // state: keep the last reported (playing) state so that the automatic reconnect
+                // in main can take the session back over and continue playback.
+                info!("session lost while active, keeping reported state for automatic resume");
+                self.context_resolver.clear();
+                self.player.emit_session_disconnected_event(
+                    self.session.connection_id(),
+                    self.session.username(),
+                );
+            } else if let Err(why) = self.handle_disconnect().await {
                 error!("error during disconnecting: {why}")
             }
         }
