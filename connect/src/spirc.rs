@@ -144,6 +144,10 @@ const CONTEXT_FETCH_THRESHOLD: usize = 2;
 const VOLUME_UPDATE_DELAY: Duration = Duration::from_millis(500);
 // to reduce updates to remote, we group some request by waiting for a set amount of time
 const UPDATE_STATE_DELAY: Duration = Duration::from_millis(200);
+// The loop condition checks `session.is_invalid()`, but the loop otherwise only wakes on dealer
+// messages, player events and commands. The dealer websocket outlives a dropped AP connection,
+// so wake up periodically to notice a dead session promptly instead of at the next track change.
+const SESSION_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 
 /// The spotify connect handle
 pub struct Spirc {
@@ -537,6 +541,7 @@ impl SpircTask {
                         error!("could not dispatch player event: {e}");
                     }
                 },
+                _ = sleep(SESSION_CHECK_INTERVAL) => {},
                 _ = async { sleep(UPDATE_STATE_DELAY).await }, if self.update_state => {
                     self.update_state = false;
 
